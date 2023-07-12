@@ -1,0 +1,12 @@
+- name: Generate Release Notes
+  uses: github-script@v4
+  with:
+    script: |
+      const { createReleaseNotes } = require('github-release-notes');
+      const notes = createReleaseNotes({
+        token: process.env.GITHUB_TOKEN,
+        repo: process.env.GITHUB_REPOSITORY,
+        lastRelease: 'latest',
+        currentRelease: 'current',
+      });
+      console.log(notes);
