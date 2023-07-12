@@ -1,0 +1,10 @@
+- name: Send Slack Notification
+  uses: slack/webhook-action@v2
+  env:
+    SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+  with:
+    args: |
+      {
+        "text": "🔔 New issue opened: ${{ github.event.issue.title }}",
+        "channel": "#your-channel"
+      }
