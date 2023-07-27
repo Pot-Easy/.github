@@ -1,0 +1,132 @@
+name: Integration Continue
+
+on:
+  push:
+    branches:
+    - main
+  pull_request:
+    branches:
+    - main
+
+jobs:
+  frontend-test:
+    runs-on: ubuntu-latest ## environement de test par défaut, à modifier en fonction de l'app
+    defaults:
+      run:
+        working-directory: frontend
+
+  steps:
+    - uses: actions/checkout@v3
+
+##    - name: Use Node.js 17 ## à modifier en fonction de notre setup
+##      uses: actions/setup-node@v3 ## à modifier en fonction de notre setup
+##      with:
+##        node-version: 17 ## à modifier en fonction de notre setup
+
+    - name: Install dependencies
+      run: nmp install ## à modifier en fonction de nos dependences
+
+    - name: Launch test
+      run: npm test ## à modifier en fonction de nos tests
+
+  backend-test:
+  runs-on: ubuntu-latest ## environement de test par défaut, à modifier en fonction de l'app
+  defaults:
+    run:
+      working-directory: backend
+  
+  services:
+    mysql:
+      image: mysql:8
+      port:
+        - 8080:8080
+      env:
+        MYSQL_ROOT_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+      options: --health-cmd="mysqladmin ping" --health-interval 10s --health-timeout 5s --health-retries 5 ## sécurité pour savoir si le dockers est prêt à recevoir des requêtes
+
+  env:
+    Patatroc_Db__Host: localhost
+    Patatroc_Db__User: root
+    Patatroc_Db__Password: ${{ secrets.CI_DB_PASSWORD }}
+    Patatroc_Db__Database: mdpDb ## à changer en fonction du mdp
+
+  steps:
+    - uses: actions/checkout@v3
+
+##    - name: Setup .NET Core SDL 6 ## à modifier en fonction de notre setup
+##      uses: actions/setup-dotnet@v2 ## à modifier en fonction de notre setup
+##      with:
+##        dotnet-version: 6.0.X ## à modifier en fonction de notre setup
+
+    - name: Install dependencies
+      run: dotnet restore ## à modifier en fonction de nos dependences
+
+    - name: Launch test
+      run : dotnet test --no-restore ## à modifier en fonction de nos tests
+
+  integration-test:
+    runs-on:  ubuntu-latest ## environement de test par défaut, à modifier en fonction de l'app
+    needs: [backend-test, frontend-test] ## se lance uniquement si les test backend et frontend sont passé
+    
+    services:
+      mysql:
+      image: mysql:8
+      port:
+        - 8080:8080
+      env:
+        MYSQL_ROOT_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+      options: --health-cmd="mysqladmin ping" --health-interval 10s --health-timeout 5s --health-retries 5 ## sécurité pour savoir si le dockers est prêt à recevoir des requêtes
+
+    env:
+      MYSQL_PWD: ${{ secrets.CI_DB_PASSWORD }}
+    
+    steps:
+      - uses: actions/checkout@v3
+
+##      name: Run database migration
+##      run: ./bootstrap-mysql.sh ## à modifié en fonction de notre db
+##      working-directory: mysql ## à modifié en fonction de notre db
+
+      - name: Start components
+        run: docker compose -f docker-compose.build.yml up -d
+        env:
+          DOCKER_NETWORK: ${{ job.services.mysql.network }}
+
+                ## à modifier en fonction de NOTRE DOCKER
+##      - name: Run integration test
+##      run: |
+##        wget -q https://github.com/grafana/k6/releases/download/v0.37.0/k6-v0.37.0-linux-amd64.tar.gz
+##        tar -xzf k6-v0.37.0-linux-amd64.tar.gz
+##        chmod +x k6-v0.37.0-linux-amd64/k6
+##        k6-v0.37.0-linux-amd64/k6 run script.js
+##      working-directory: k6
+
+    - name: Stop components
+      run: docker compose -f docker-compose.build.yml down 
+
+
+  build-image:
+    strategy:
+      matrix:
+        component: ["frontend", "backend"]
+    runs-on: ubuntu-latest ## environement de test par défaut, à modifier en fonction de l'app
+    permissions:
+      packages: write
+      contents: read
+    needs: [integration-test]
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }} ## petit if pour evité la MORT
+    
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Log in to registry ## push les images sur github (github possède un registre de conteneur)
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin ## à modifier en fonction de notre mdp / GITHUB TOKEN A RECUP
+
+                  ## à modifier en fonction de NOTRE DOCKER
+##    - name: Build the Docker image
+##      uses: docker/build-push-action@v2
+##      with: 
+##        context: ${{ matrix.component }}
+##        file: ${{ matrix.component }}/Dockerfile
+##        push: true
+##        tags: ghcr.io/${{ github.repository_owner }}/spm-${{ matrix.component }}:${{ github.ref_name }}    
